@@ -44,7 +44,10 @@ pub async fn serve(
 
 fn set_permissions(path: &std::path::Path) {
     use std::os::unix::fs::PermissionsExt;
-    if let Err(e) = std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o660)) {
+    // 0666: the daemon runs as root but its clients (GUI, CLI) run as the
+    // unprivileged desktop user, so the socket must be world-accessible.
+    // Local-only IPC; proper auth (polkit/group) is a later-phase concern.
+    if let Err(e) = std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o666)) {
         warn!(path = %path.display(), error = %e, "cannot chmod socket");
     }
 }
