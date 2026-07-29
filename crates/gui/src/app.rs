@@ -59,7 +59,6 @@ pub struct App {
     banner: adw::Banner,
     title: adw::WindowTitle,
     toasts: adw::ToastOverlay,
-    header_logo: gtk::Image,
     /// View stack tabs with their base UI icon names.
     tabs: Vec<(adw::ViewStackPage, &'static str)>,
     dark_flag: Arc<AtomicBool>,
@@ -122,10 +121,8 @@ impl SimpleComponent for App {
 
         // Window chrome: header bar with live network subtitle, offline
         // banner, view stack + bottom switcher (adaptive), toasts.
-        let header_logo = crate::icons::ui_image("plane", dark);
         let title = adw::WindowTitle::new("Travel Mode", "");
         let header = adw::HeaderBar::new();
-        header.pack_start(&header_logo);
         header.set_title_widget(Some(&title));
 
         let banner = adw::Banner::new("travelmoded not reachable — retrying");
@@ -224,7 +221,6 @@ impl SimpleComponent for App {
             banner,
             title,
             toasts,
-            header_logo,
             tabs,
             dark_flag,
         };
@@ -302,7 +298,6 @@ impl App {
         self.title.set_subtitle(&subtitle);
 
         // Theme-dependent icons.
-        crate::icons::set_ui_icon(&self.header_logo, "plane", dark);
         for (page, icon) in &self.tabs {
             page.set_icon_name(Some(&crate::icons::ui_icon_name(icon, dark)));
         }
