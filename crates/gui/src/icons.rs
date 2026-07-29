@@ -225,3 +225,4 @@ mod tests {
         assert!(decode_png(&png_bytes, 1).is_err());
     }
 }
+
