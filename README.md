@@ -95,7 +95,9 @@ travelmode --json top       # machine-readable output
 
 `travelmode-gui` is a GTK4/libadwaita desktop client (relm4) with a
 StatusNotifierItem tray icon. Build requirements: `gtk4` and
-`libadwaita-1` development packages (targets the libadwaita 1.4 API).
+`libadwaita-1` development packages (targets the libadwaita 1.4 API),
+plus `glib-compile-resources` (from glib2, used to bundle the UI icon
+set).
 
 ```sh
 cargo build --workspace --release
@@ -124,6 +126,13 @@ variants — `travelmode-dark.svg` (white glyph, for dark themes) and
 rendered at 24/32/48/64/128/256 with `rsvg-convert -w N -h N`. The
 tray icon is embedded in the binary and follows the system color
 scheme; the window/taskbar icon resolves from the icon theme.
+
+The in-app UI icon set lives in `data/icons/ui/` (18 white-glyph SVGs).
+`data/icons/render-ui-icons.sh` renders each one in both variants
+(white for dark themes, #1E1E1E for light themes) at 24px and 48px into
+`data/icons/ui/rendered/` — the 48px PNGs are embedded in the binary
+(row icons as textures, tab icons via a compiled gresource) and follow
+the system color scheme live. Re-run the script after editing the SVGs.
 
 ```sh
 # Window/taskbar icon (per-user, hicolor theme):

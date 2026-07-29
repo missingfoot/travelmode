@@ -28,6 +28,14 @@ pub struct AppEntry {
     prev_recv: u64,
 }
 
+impl AppEntry {
+    /// Light-switch model for the Apps page: the switch is ON when the
+    /// app is allowed to use the network.
+    pub fn is_allowed(&self) -> bool {
+        !self.blocked
+    }
+}
+
 /// Everything the UI renders, kept consistent with the daemon.
 #[derive(Debug, Default)]
 pub struct ClientState {
@@ -430,6 +438,14 @@ mod tests {
         assert_eq!(s.conns.len(), MAX_CONNECTIONS);
         assert!(!s.conns.contains_key("tcp:0"));
         assert!(s.conns.contains_key(&format!("tcp:{}", MAX_CONNECTIONS + 9)));
+    }
+
+    #[test]
+    fn allowed_is_the_inverse_of_blocked() {
+        let mut app = AppEntry::default();
+        assert!(app.is_allowed());
+        app.blocked = true;
+        assert!(!app.is_allowed());
     }
 
     #[test]

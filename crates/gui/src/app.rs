@@ -33,6 +33,8 @@ pub enum AppMsg {
     Tick,
     /// Banner's "Retry now" button.
     Retry,
+    /// System color scheme changed; re-render theme-dependent icons.
+    ThemeChanged,
     TrayOpen,
     TrayQuit,
     TrayReady(bool),
@@ -57,6 +59,10 @@ pub struct App {
     banner: adw::Banner,
     title: adw::WindowTitle,
     toasts: adw::ToastOverlay,
+    header_logo: gtk::Image,
+    /// View stack tabs with their base UI icon names.
+    tabs: Vec<(adw::ViewStackPage, &'static str)>,
+    dark_flag: Arc<AtomicBool>,
 }
 
 impl SimpleComponent for App {
@@ -91,22 +97,35 @@ impl SimpleComponent for App {
         );
         let cmd_tx = handle.cmd_tx;
 
-        // Follow the system color scheme for the tray glyph variant.
+        // Follow the system color scheme for the tray glyph variant and
+        // theme-dependent icons in the UI.
         {
             let style = adw::StyleManager::default();
             dark_flag.store(style.is_dark(), Ordering::Relaxed);
             let dark_flag = dark_flag.clone();
             let cmd_tx = cmd_tx.clone();
+            let input = sender.input_sender().clone();
             style.connect_notify(Some("dark"), move |style, _| {
                 dark_flag.store(style.is_dark(), Ordering::Relaxed);
                 let _ = cmd_tx.send(GuiCmd::RefreshTrayIcon);
+                let _ = input.send(AppMsg::ThemeChanged);
             });
         }
 
+        // Make the custom UI icon set resolvable by themed name (used
+        // for the view stack tabs).
+        if let Some(display) = gtk::gdk::Display::default() {
+            gtk::IconTheme::for_display(&display)
+                .add_resource_path("/com/github/missingfoot/travelmode/icons");
+        }
+        let dark = dark_flag.load(Ordering::Relaxed);
+
         // Window chrome: header bar with live network subtitle, offline
         // banner, view stack + bottom switcher (adaptive), toasts.
+        let header_logo = crate::icons::ui_image("plane", dark);
         let title = adw::WindowTitle::new("Travel Mode", "");
         let header = adw::HeaderBar::new();
+        header.pack_start(&header_logo);
         header.set_title_widget(Some(&title));
 
         let banner = adw::Banner::new("travelmoded not reachable — retrying");
@@ -123,30 +142,30 @@ impl SimpleComponent for App {
         let settings = SettingsPage::new(&init.socket_path.display().to_string(), &cmd_tx);
 
         let stack = adw::ViewStack::new();
-        stack.add_titled_with_icon(
-            dashboard.container(),
-            Some("dashboard"),
-            "Dashboard",
-            "user-home-symbolic",
-        );
-        stack.add_titled_with_icon(
+        let mut tabs = Vec::new();
+        let mut add_tab = |child: &gtk::Widget, name: &str, title: &str, icon: &'static str| {
+            let page = stack.add_titled_with_icon(
+                child,
+                Some(name),
+                title,
+                &crate::icons::ui_icon_name(icon, dark),
+            );
+            tabs.push((page, icon));
+        };
+        add_tab(dashboard.container(), "dashboard", "Dashboard", "plane");
+        add_tab(
             apps_page.container(),
-            Some("applications"),
+            "applications",
             "Applications",
-            "application-x-executable-symbolic",
+            "apps",
         );
-        stack.add_titled_with_icon(
+        add_tab(
             conns_page.container(),
-            Some("connections"),
+            "connections",
             "Connections",
-            "network-transmit-receive-symbolic",
+            "connections",
         );
-        stack.add_titled_with_icon(
-            settings.container(),
-            Some("settings"),
-            "Settings",
-            "emblem-system-symbolic",
-        );
+        add_tab(settings.container(), "settings", "Settings", "settings");
         stack.set_vexpand(true);
 
         let switcher = adw::ViewSwitcherBar::new();
@@ -205,6 +224,9 @@ impl SimpleComponent for App {
             banner,
             title,
             toasts,
+            header_logo,
+            tabs,
+            dark_flag,
         };
         ComponentParts {
             model,
@@ -248,6 +270,9 @@ impl SimpleComponent for App {
             AppMsg::Retry => {
                 let _ = self.cmd_tx.send(GuiCmd::Reconnect);
             }
+            AppMsg::ThemeChanged => {
+                self.refresh();
+            }
             AppMsg::TrayOpen => {
                 self.window.present();
             }
@@ -263,6 +288,7 @@ impl SimpleComponent for App {
 impl App {
     /// Re-render chrome + all pages from the current state.
     fn refresh(&mut self) {
+        let dark = self.dark_flag.load(Ordering::Relaxed);
         self.banner.set_revealed(!self.state.connected);
         let subtitle = if !self.state.connected {
             "Offline".to_string()
@@ -275,9 +301,15 @@ impl App {
         };
         self.title.set_subtitle(&subtitle);
 
-        self.dashboard.update(&self.state);
-        self.apps_page.update(&self.state, &self.cmd_tx);
-        self.conns_page.update(&self.state);
-        self.settings.update(&self.state);
+        // Theme-dependent icons.
+        crate::icons::set_ui_icon(&self.header_logo, "plane", dark);
+        for (page, icon) in &self.tabs {
+            page.set_icon_name(Some(&crate::icons::ui_icon_name(icon, dark)));
+        }
+
+        self.dashboard.update(&self.state, dark);
+        self.apps_page.update(&self.state, &self.cmd_tx, dark);
+        self.conns_page.update(&self.state, dark);
+        self.settings.update(&self.state, dark);
     }
 }

@@ -1,5 +1,8 @@
-//! Applications page: one row per app with live traffic and a block
-//! switch. Rows are created on first sight and updated in place.
+//! Applications page: one row per app with live traffic and an
+//! internet switch. "Light switch" model: switch ON = the app may use
+//! the network, switch OFF = blocked. Toggling OFF sends a Block rule,
+//! toggling ON removes it. The daemon's rule events flowing back are
+//! the source of truth for the switch position.
 
 use std::cell::Cell;
 use std::collections::HashMap;
@@ -12,10 +15,13 @@ use tokio::sync::mpsc;
 
 use crate::client::GuiCmd;
 use crate::fmt::{human_bytes, human_speed};
+use crate::icons::{set_ui_icon, ui_image};
 use crate::state::{AppEntry, ClientState};
 
 struct AppRow {
     row: adw::ActionRow,
+    icon: gtk::Image,
+    blocked_badge: gtk::Image,
     status: gtk::Label,
     switch: gtk::Switch,
     /// Guards against reacting to our own set_active calls.
@@ -66,7 +72,12 @@ impl AppsPage {
         &self.container
     }
 
-    pub fn update(&mut self, state: &ClientState, cmd_tx: &mpsc::UnboundedSender<GuiCmd>) {
+    pub fn update(
+        &mut self,
+        state: &ClientState,
+        cmd_tx: &mpsc::UnboundedSender<GuiCmd>,
+        dark: bool,
+    ) {
         // Drop rows for apps that left the state.
         let stale: Vec<String> = self
             .rows
@@ -81,17 +92,20 @@ impl AppsPage {
         }
         for (key, app) in &state.apps {
             match self.rows.get(key) {
-                Some(row) => Self::refresh_row(row, app),
+                Some(row) => Self::refresh_row(row, app, dark),
                 None => {
                     let row = self.create_row(app, cmd_tx);
-                    Self::refresh_row(&row, app);
+                    Self::refresh_row(&row, app, dark);
                     self.rows.insert(key.clone(), row);
                 }
             }
         }
     }
 
-    fn refresh_row(row: &AppRow, app: &AppEntry) {
+    fn refresh_row(row: &AppRow, app: &AppEntry, dark: bool) {
+        set_ui_icon(&row.icon, "app-generic", dark);
+        row.blocked_badge.set_visible(app.blocked);
+        set_ui_icon(&row.blocked_badge, "blocked", dark);
         row.row.set_subtitle(&format!(
             "↑ {} · ↓ {}  —  total ↑ {} ↓ {}",
             human_speed(app.speed_up),
@@ -110,7 +124,8 @@ impl AppsPage {
         row.row.set_opacity(if app.blocked { 0.6 } else { 1.0 });
         row.rule_id.set(app.block_rule_id);
         row.updating.set(true);
-        row.switch.set_active(app.blocked);
+        // Light-switch semantics: ON = allowed, OFF = blocked.
+        row.switch.set_active(app.is_allowed());
         // Apps without a known exe cannot be blocked via rules.
         row.switch.set_sensitive(app.exe.is_some());
         row.updating.set(false);
@@ -119,7 +134,13 @@ impl AppsPage {
     fn create_row(&self, app: &AppEntry, cmd_tx: &mpsc::UnboundedSender<GuiCmd>) -> AppRow {
         let row = adw::ActionRow::new();
         row.set_title(&app.name);
-        row.add_prefix(&gtk::Image::from_icon_name("application-x-executable-symbolic"));
+        let icon = ui_image("app-generic", false);
+        row.add_prefix(&icon);
+
+        let blocked_badge = ui_image("blocked", false);
+        blocked_badge.set_pixel_size(16);
+        blocked_badge.set_visible(false);
+        blocked_badge.set_valign(gtk::Align::Center);
 
         let status = gtk::Label::new(Some("Allowed"));
         status.set_valign(gtk::Align::Center);
@@ -127,6 +148,7 @@ impl AppsPage {
         switch.set_valign(gtk::Align::Center);
 
         let suffix = gtk::Box::new(gtk::Orientation::Horizontal, 12);
+        suffix.append(&blocked_badge);
         suffix.append(&status);
         suffix.append(&switch);
         row.add_suffix(&suffix);
@@ -144,14 +166,16 @@ impl AppsPage {
                     return glib::Propagation::Proceed;
                 }
                 if active {
-                    if let Some(exe) = &exe {
-                        let _ = cmd_tx.send(GuiCmd::Block {
-                            name: name.clone(),
-                            exe: exe.clone(),
-                        });
+                    // Switched ON: allow the app again.
+                    if let Some(id) = rule_id.get() {
+                        let _ = cmd_tx.send(GuiCmd::Unblock { rule_id: id });
                     }
-                } else if let Some(id) = rule_id.get() {
-                    let _ = cmd_tx.send(GuiCmd::Unblock { rule_id: id });
+                } else if let Some(exe) = &exe {
+                    // Switched OFF: block the app.
+                    let _ = cmd_tx.send(GuiCmd::Block {
+                        name: name.clone(),
+                        exe: exe.clone(),
+                    });
                 }
                 glib::Propagation::Proceed
             });
@@ -160,6 +184,8 @@ impl AppsPage {
         self.list.append(&row);
         AppRow {
             row,
+            icon,
+            blocked_badge,
             status,
             switch,
             updating,

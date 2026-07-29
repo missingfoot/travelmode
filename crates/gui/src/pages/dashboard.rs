@@ -4,12 +4,12 @@ use relm4::adw::{self, prelude::*};
 use relm4::gtk;
 
 use crate::fmt::{human_bytes, human_speed};
+use crate::icons::{set_ui_icon, ui_image};
 use crate::state::ClientState;
 
 pub struct DashboardPage {
     container: gtk::Widget,
     network_row: adw::ActionRow,
-    network_icon: gtk::Image,
     metered_badge: gtk::Label,
     gateway_row: adw::ActionRow,
     dns_row: adw::ActionRow,
@@ -18,12 +18,23 @@ pub struct DashboardPage {
     session_row: adw::ActionRow,
     active_row: adw::ActionRow,
     blocked_row: adw::ActionRow,
+    /// Row icons, re-pointed at the right variant on theme change.
+    icons: Vec<(gtk::Image, &'static str)>,
 }
 
-fn pref_row(group: &adw::PreferencesGroup, icon: &str, title: &str) -> adw::ActionRow {
+/// Build an ActionRow with exactly one prefix icon; the caller keeps
+/// the image handle to refresh it on theme changes.
+fn pref_row(
+    group: &adw::PreferencesGroup,
+    icon: &'static str,
+    title: &str,
+    icons: &mut Vec<(gtk::Image, &'static str)>,
+) -> adw::ActionRow {
     let row = adw::ActionRow::new();
     row.set_title(title);
-    row.add_prefix(&gtk::Image::from_icon_name(icon));
+    let image = ui_image(icon, false);
+    row.add_prefix(&image);
+    icons.push((image, icon));
     group.add(&row);
     row
 }
@@ -38,31 +49,31 @@ fn numeric_suffix(row: &adw::ActionRow) -> gtk::Label {
 
 impl DashboardPage {
     pub fn new() -> Self {
+        let mut icons = Vec::new();
+
         let network = adw::PreferencesGroup::new();
         network.set_title("Network");
-        let network_row = pref_row(&network, "network-wired-symbolic", "Connection");
-        let network_icon = gtk::Image::from_icon_name("network-wired-symbolic");
-        network_row.add_prefix(&network_icon);
+        let network_row = pref_row(&network, "connection", "Connection", &mut icons);
         let metered_badge = gtk::Label::new(Some("Metered"));
         metered_badge.add_css_class("accent");
         metered_badge.set_valign(gtk::Align::Center);
         metered_badge.set_visible(false);
         network_row.add_suffix(&metered_badge);
-        let gateway_row = pref_row(&network, "network-server-symbolic", "Gateway");
-        let dns_row = pref_row(&network, "preferences-system-network-symbolic", "DNS servers");
+        let gateway_row = pref_row(&network, "gateway", "Gateway", &mut icons);
+        let dns_row = pref_row(&network, "dns", "DNS servers", &mut icons);
 
         let traffic = adw::PreferencesGroup::new();
         traffic.set_title("Traffic");
-        let down_row = pref_row(&traffic, "go-bottom-symbolic", "Download");
+        let down_row = pref_row(&traffic, "download", "Download", &mut icons);
         let down_speed = numeric_suffix(&down_row);
-        let up_row = pref_row(&traffic, "go-top-symbolic", "Upload");
+        let up_row = pref_row(&traffic, "upload", "Upload", &mut icons);
         let up_speed = numeric_suffix(&up_row);
-        let session_row = pref_row(&traffic, "hourglass-symbolic", "This session");
+        let session_row = pref_row(&traffic, "session", "This session", &mut icons);
 
         let apps = adw::PreferencesGroup::new();
         apps.set_title("Applications");
-        let active_row = pref_row(&apps, "application-x-executable-symbolic", "Active apps");
-        let blocked_row = pref_row(&apps, "action-unavailable-symbolic", "Blocked apps");
+        let active_row = pref_row(&apps, "apps", "Active apps", &mut icons);
+        let blocked_row = pref_row(&apps, "blocked", "Blocked apps", &mut icons);
 
         let content = gtk::Box::new(gtk::Orientation::Vertical, 24);
         content.set_margin_top(18);
@@ -83,7 +94,6 @@ impl DashboardPage {
         Self {
             container: scroll.upcast(),
             network_row,
-            network_icon,
             metered_badge,
             gateway_row,
             dns_row,
@@ -92,6 +102,7 @@ impl DashboardPage {
             session_row,
             active_row,
             blocked_row,
+            icons,
         }
     }
 
@@ -99,7 +110,10 @@ impl DashboardPage {
         &self.container
     }
 
-    pub fn update(&self, state: &ClientState) {
+    pub fn update(&self, state: &ClientState, dark: bool) {
+        for (image, name) in &self.icons {
+            set_ui_icon(image, name, dark);
+        }
         match &state.network {
             Some(net) => {
                 let name = net
@@ -108,13 +122,7 @@ impl DashboardPage {
                     .or_else(|| net.primary_interface.clone())
                     .unwrap_or_else(|| "Not connected".into());
                 self.network_row.set_subtitle(&name);
-                self.network_icon.set_icon_name(Some(if net.ssid.is_some() {
-                    "network-wireless-symbolic"
-                } else {
-                    "network-wired-symbolic"
-                }));
-                self.metered_badge
-                    .set_visible(net.metered.unwrap_or(false));
+                self.metered_badge.set_visible(net.metered.unwrap_or(false));
                 self.gateway_row.set_subtitle(
                     &net.gateway
                         .map(|g| g.to_string())

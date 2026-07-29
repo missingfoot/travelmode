@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<gresources>
+  <gresource prefix="/com/github/missingfoot/travelmode/icons/48x48/apps">
+    <file alias="travelmode-ui-app-generic-dark.png">data/icons/ui/rendered/app-generic-dark-48.png</file>
+    <file alias="travelmode-ui-app-generic-light.png">data/icons/ui/rendered/app-generic-light-48.png</file>
+    <file alias="travelmode-ui-apps-dark.png">data/icons/ui/rendered/apps-dark-48.png</file>
+    <file alias="travelmode-ui-apps-light.png">data/icons/ui/rendered/apps-light-48.png</file>
+    <file alias="travelmode-ui-blocked-dark.png">data/icons/ui/rendered/blocked-dark-48.png</file>
+    <file alias="travelmode-ui-blocked-light.png">data/icons/ui/rendered/blocked-light-48.png</file>
+    <file alias="travelmode-ui-connections-dark.png">data/icons/ui/rendered/connections-dark-48.png</file>
+    <file alias="travelmode-ui-connections-light.png">data/icons/ui/rendered/connections-light-48.png</file>
+    <file alias="travelmode-ui-connection-dark.png">data/icons/ui/rendered/connection-dark-48.png</file>
+    <file alias="travelmode-ui-connection-light.png">data/icons/ui/rendered/connection-light-48.png</file>
+    <file alias="travelmode-ui-dns-dark.png">data/icons/ui/rendered/dns-dark-48.png</file>
+    <file alias="travelmode-ui-dns-light.png">data/icons/ui/rendered/dns-light-48.png</file>
+    <file alias="travelmode-ui-download-dark.png">data/icons/ui/rendered/download-dark-48.png</file>
+    <file alias="travelmode-ui-download-light.png">data/icons/ui/rendered/download-light-48.png</file>
+    <file alias="travelmode-ui-filtering-dark.png">data/icons/ui/rendered/filtering-dark-48.png</file>
+    <file alias="travelmode-ui-filtering-light.png">data/icons/ui/rendered/filtering-light-48.png</file>
+    <file alias="travelmode-ui-gateway-dark.png">data/icons/ui/rendered/gateway-dark-48.png</file>
+    <file alias="travelmode-ui-gateway-light.png">data/icons/ui/rendered/gateway-light-48.png</file>
+    <file alias="travelmode-ui-license-dark.png">data/icons/ui/rendered/license-dark-48.png</file>
+    <file alias="travelmode-ui-license-light.png">data/icons/ui/rendered/license-light-48.png</file>
+    <file alias="travelmode-ui-pause-dark.png">data/icons/ui/rendered/pause-dark-48.png</file>
+    <file alias="travelmode-ui-pause-light.png">data/icons/ui/rendered/pause-light-48.png</file>
+    <file alias="travelmode-ui-plane-dark.png">data/icons/ui/rendered/plane-dark-48.png</file>
+    <file alias="travelmode-ui-plane-light.png">data/icons/ui/rendered/plane-light-48.png</file>
+    <file alias="travelmode-ui-play-dark.png">data/icons/ui/rendered/play-dark-48.png</file>
+    <file alias="travelmode-ui-play-light.png">data/icons/ui/rendered/play-light-48.png</file>
+    <file alias="travelmode-ui-session-dark.png">data/icons/ui/rendered/session-dark-48.png</file>
+    <file alias="travelmode-ui-session-light.png">data/icons/ui/rendered/session-light-48.png</file>
+    <file alias="travelmode-ui-settings-dark.png">data/icons/ui/rendered/settings-dark-48.png</file>
+    <file alias="travelmode-ui-settings-light.png">data/icons/ui/rendered/settings-light-48.png</file>
+    <file alias="travelmode-ui-socket-dark.png">data/icons/ui/rendered/socket-dark-48.png</file>
+    <file alias="travelmode-ui-socket-light.png">data/icons/ui/rendered/socket-light-48.png</file>
+    <file alias="travelmode-ui-upload-dark.png">data/icons/ui/rendered/upload-dark-48.png</file>
+    <file alias="travelmode-ui-upload-light.png">data/icons/ui/rendered/upload-light-48.png</file>
+    <file alias="travelmode-ui-uptime-dark.png">data/icons/ui/rendered/uptime-dark-48.png</file>
+    <file alias="travelmode-ui-uptime-light.png">data/icons/ui/rendered/uptime-light-48.png</file>
+  </gresource>
+</gresources>

@@ -8,7 +8,9 @@ use relm4::gtk;
 use relm4::gtk::glib;
 use tokio::sync::mpsc;
 
-use crate::client::GuiCmd;use crate::fmt::human_uptime;
+use crate::client::GuiCmd;
+use crate::fmt::human_uptime;
+use crate::icons::{set_ui_icon, ui_image};
 use crate::state::ClientState;
 
 pub struct SettingsPage {
@@ -16,26 +18,38 @@ pub struct SettingsPage {
     version_row: adw::ActionRow,
     uptime_row: adw::ActionRow,
     filtering_row: adw::ActionRow,
+    pause_icon: gtk::Image,
     pause_switch: gtk::Switch,
     pause_updating: Rc<Cell<bool>>,
+    /// Row icons, re-pointed at the right variant on theme change.
+    icons: Vec<(gtk::Image, &'static str)>,
 }
 
-fn info_row(group: &adw::PreferencesGroup, icon: &str, title: &str) -> adw::ActionRow {
+fn info_row(
+    group: &adw::PreferencesGroup,
+    icon: &'static str,
+    title: &str,
+    icons: &mut Vec<(gtk::Image, &'static str)>,
+) -> adw::ActionRow {
     let row = adw::ActionRow::new();
     row.set_title(title);
-    row.add_prefix(&gtk::Image::from_icon_name(icon));
+    let image = ui_image(icon, false);
+    row.add_prefix(&image);
+    icons.push((image, icon));
     group.add(&row);
     row
 }
 
 impl SettingsPage {
     pub fn new(socket_path: &str, cmd_tx: &mpsc::UnboundedSender<GuiCmd>) -> Self {
+        let mut icons = Vec::new();
+
         let daemon = adw::PreferencesGroup::new();
         daemon.set_title("Daemon");
-        let version_row = info_row(&daemon, "emblem-system-symbolic", "Version");
-        let uptime_row = info_row(&daemon, "hourglass-symbolic", "Uptime");
-        let filtering_row = info_row(&daemon, "security-high-symbolic", "Filtering");
-        let socket_row = info_row(&daemon, "network-wired-symbolic", "Socket");
+        let version_row = info_row(&daemon, "settings", "Version", &mut icons);
+        let uptime_row = info_row(&daemon, "uptime", "Uptime", &mut icons);
+        let filtering_row = info_row(&daemon, "filtering", "Filtering", &mut icons);
+        let socket_row = info_row(&daemon, "socket", "Socket", &mut icons);
         socket_row.set_subtitle(socket_path);
 
         let filtering = adw::PreferencesGroup::new();
@@ -43,7 +57,8 @@ impl SettingsPage {
         let pause_row = adw::ActionRow::new();
         pause_row.set_title("Pause filtering");
         pause_row.set_subtitle("Temporarily allow all traffic");
-        pause_row.add_prefix(&gtk::Image::from_icon_name("media-playback-pause-symbolic"));
+        let pause_icon = ui_image("pause", false);
+        pause_row.add_prefix(&pause_icon);
         let pause_switch = gtk::Switch::new();
         pause_switch.set_valign(gtk::Align::Center);
         pause_row.add_suffix(&pause_switch);
@@ -64,12 +79,12 @@ impl SettingsPage {
 
         let about = adw::PreferencesGroup::new();
         about.set_title("About");
-        let about_row = info_row(&about, "network-transmit-receive-symbolic", "Travel Mode");
+        let about_row = info_row(&about, "plane", "Travel Mode", &mut icons);
         about_row.set_subtitle(&format!(
             "Per-application network control — v{}",
             env!("CARGO_PKG_VERSION")
         ));
-        let license_row = info_row(&about, "emblem-documents-symbolic", "License");
+        let license_row = info_row(&about, "license", "License", &mut icons);
         license_row.set_subtitle("GPL-3.0-or-later");
 
         let content = gtk::Box::new(gtk::Orientation::Vertical, 24);
@@ -93,8 +108,10 @@ impl SettingsPage {
             version_row,
             uptime_row,
             filtering_row,
+            pause_icon,
             pause_switch,
             pause_updating,
+            icons,
         }
     }
 
@@ -102,7 +119,13 @@ impl SettingsPage {
         &self.container
     }
 
-    pub fn update(&self, state: &ClientState) {
+    pub fn update(&self, state: &ClientState, dark: bool) {
+        for (image, name) in &self.icons {
+            set_ui_icon(image, name, dark);
+        }
+        // The pause row icon reflects the current state: paused shows
+        // "play" (click to resume), running shows "pause".
+        set_ui_icon(&self.pause_icon, if state.paused { "play" } else { "pause" }, dark);
         match &state.status {
             Some(status) => {
                 self.version_row.set_subtitle(&status.version);

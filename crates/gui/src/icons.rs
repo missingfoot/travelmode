@@ -8,6 +8,8 @@
 
 use std::sync::OnceLock;
 
+use relm4::gtk;
+
 pub const SIZES: [u32; 6] = [24, 32, 48, 64, 128, 256];
 
 macro_rules! variant_pngs {
@@ -28,6 +30,80 @@ const LIGHT_PNGS: [&[u8]; 6] = variant_pngs!("light");
 
 static DARK_ICONS: OnceLock<Vec<ksni::Icon>> = OnceLock::new();
 static LIGHT_ICONS: OnceLock<Vec<ksni::Icon>> = OnceLock::new();
+
+// ---------------------------------------------------------- UI icons
+
+/// Names of the custom UI icon set (data/icons/ui/*.svg, rendered to
+/// PNG by data/icons/render-ui-icons.sh). Referenced by tests and kept
+/// as the canonical list for the render/embed pipeline.
+#[allow(dead_code)]
+pub const UI_ICONS: [&str; 18] = [
+    "app-generic", "apps", "blocked", "connection", "connections", "dns",
+    "download", "filtering", "gateway", "license", "pause", "plane",
+    "play", "session", "settings", "socket", "upload", "uptime",
+];
+
+macro_rules! ui_icon_pngs {
+    ($($name:literal),*) => {
+        fn ui_icon_bytes(name: &str, dark: bool) -> Option<&'static [u8]> {
+            match (name, dark) {
+                $(
+                    ($name, true) => Some(include_bytes!(concat!(
+                        "../../../data/icons/ui/rendered/", $name, "-dark-48.png"
+                    ))),
+                    ($name, false) => Some(include_bytes!(concat!(
+                        "../../../data/icons/ui/rendered/", $name, "-light-48.png"
+                    ))),
+                )*
+                _ => None,
+            }
+        }
+    };
+}
+
+ui_icon_pngs!(
+    "app-generic", "apps", "blocked", "connection", "connections", "dns",
+    "download", "filtering", "gateway", "license", "pause", "plane",
+    "play", "session", "settings", "socket", "upload", "uptime"
+);
+
+/// Themed icon name for a UI icon (registered via gresource in main).
+/// Used where only an icon *name* is accepted (view stack tabs).
+pub fn ui_icon_name(name: &str, dark: bool) -> String {
+    format!(
+        "travelmode-ui-{name}-{variant}",
+        variant = if dark { "dark" } else { "light" }
+    )
+}
+
+/// Load a custom UI icon as a texture (48px PNG; display at 24px for
+/// crisp rendering at scale factor 2). `dark = true` selects the white
+/// glyph. Textures are cheap enough to create per refresh; no cache.
+pub fn ui_icon(name: &str, dark: bool) -> Option<gtk::gdk::Texture> {
+    let bytes = ui_icon_bytes(name, dark)?;
+    match gtk::gdk::Texture::from_bytes(&gtk::glib::Bytes::from_static(bytes)) {
+        Ok(texture) => Some(texture),
+        Err(e) => {
+            tracing::warn!(name, dark, error = %e, "ui icon texture failed");
+            None
+        }
+    }
+}
+
+/// A 24px image widget showing a custom UI icon.
+pub fn ui_image(name: &str, dark: bool) -> gtk::Image {
+    let image = gtk::Image::new();
+    image.set_pixel_size(24);
+    set_ui_icon(&image, name, dark);
+    image
+}
+
+/// Re-point an image at a custom UI icon (e.g. after a theme change).
+pub fn set_ui_icon(image: &gtk::Image, name: &str, dark: bool) {
+    if let Some(texture) = ui_icon(name, dark) {
+        image.set_paintable(Some(&texture));
+    }
+}
 
 /// Pixmaps for the requested variant. `dark = true` selects the white
 /// glyph (for dark themes). Returns an empty list if decoding fails;
@@ -114,6 +190,26 @@ mod tests {
                 assert_eq!(icon.data.len(), (size * size * 4) as usize);
             }
         }
+    }
+
+    #[test]
+    fn all_ui_icons_are_embedded() {
+        // Every declared UI icon must have both variants compiled in.
+        // (Decoding to a texture requires a display, so we check the
+        // PNG magic bytes here instead.)
+        for name in UI_ICONS {
+            for dark in [true, false] {
+                let bytes = ui_icon_bytes(name, dark)
+                    .unwrap_or_else(|| panic!("missing ui icon {name}"));
+                assert_eq!(&bytes[..4], &[0x89, b'P', b'N', b'G'], "{name} not a PNG");
+            }
+        }
+    }
+
+    #[test]
+    fn ui_icon_themed_names() {
+        assert_eq!(ui_icon_name("plane", true), "travelmode-ui-plane-dark");
+        assert_eq!(ui_icon_name("apps", false), "travelmode-ui-apps-light");
     }
 
     #[test]

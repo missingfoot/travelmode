@@ -35,6 +35,12 @@ fn main() {
         .init();
 
     let args = Args::parse();
+
+    // Register the compiled custom UI icon set (see build.rs).
+    if let Err(e) = relm4::gtk::gio::resources_register_include!("ui-icons.gresource") {
+        tracing::warn!(error = %e, "failed to register UI icon resources");
+    }
+
     let app = relm4::RelmApp::new("com.github.missingfoot.travelmode");
     // Hand GTK an empty argv: our own flags (e.g. --socket) are already
     // consumed by clap and GTK would reject them as unknown options.

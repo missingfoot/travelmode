@@ -6,10 +6,12 @@ use relm4::adw::{self, prelude::*};
 use relm4::gtk;
 
 use crate::fmt::human_bytes;
+use crate::icons::{set_ui_icon, ui_image};
 use crate::state::ClientState;
 
 struct ConnRow {
     row: adw::ActionRow,
+    icon: gtk::Image,
     stats: gtk::Label,
 }
 
@@ -55,7 +57,7 @@ impl ConnsPage {
         &self.container
     }
 
-    pub fn update(&mut self, state: &ClientState) {
+    pub fn update(&mut self, state: &ClientState, dark: bool) {
         // Drop rows for closed flows.
         let stale: Vec<String> = self
             .rows
@@ -75,7 +77,10 @@ impl ConnsPage {
                 human_bytes(conn.bytes_recv)
             );
             match self.rows.get(key) {
-                Some(row) => row.stats.set_text(&stats_text),
+                Some(row) => {
+                    row.stats.set_text(&stats_text);
+                    set_ui_icon(&row.icon, "connections", dark);
+                }
                 None => {
                     let process =
                         conn.process_name.clone().unwrap_or_else(|| "unknown".into());
@@ -85,15 +90,14 @@ impl ConnsPage {
                         format!("{:?}", conn.protocol).to_lowercase()
                     ));
                     row.set_subtitle(&format!("{}:{}", conn.remote_addr, conn.remote_port));
-                    row.add_prefix(&gtk::Image::from_icon_name(
-                        "network-transmit-receive-symbolic",
-                    ));
+                    let icon = ui_image("connections", dark);
+                    row.add_prefix(&icon);
                     let stats = gtk::Label::new(Some(&stats_text));
                     stats.add_css_class("numeric");
                     stats.set_valign(gtk::Align::Center);
                     row.add_suffix(&stats);
                     self.list.append(&row);
-                    self.rows.insert(key.clone(), ConnRow { row, stats });
+                    self.rows.insert(key.clone(), ConnRow { row, icon, stats });
                 }
             }
         }
