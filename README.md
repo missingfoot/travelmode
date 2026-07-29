@@ -116,6 +116,24 @@ flow list), Settings (daemon status, global pause, about). The tray
 menu offers Open, Pause/Resume Filtering and Quit (the GUI only — the
 daemon keeps running). Closing the window hides it to the tray.
 
+### Icons and launcher entry
+
+The app glyph (a paper plane) ships in-repo under `data/icons/` in two
+variants — `travelmode-dark.svg` (white glyph, for dark themes) and
+`travelmode-light.svg` (#1E1E1E glyph, for light themes) — plus PNGs
+rendered at 24/32/48/64/128/256 with `rsvg-convert -w N -h N`. The
+tray icon is embedded in the binary and follows the system color
+scheme; the window/taskbar icon resolves from the icon theme.
+
+```sh
+# Window/taskbar icon (per-user, hicolor theme):
+./dev/install-icons.sh
+
+# Launcher entry:
+cp packaging/com.github.missingfoot.travelmode.desktop ~/.local/share/applications/
+# or system-wide: sudo desktop-file-install packaging/com.github.missingfoot.travelmode.desktop
+```
+
 ## Development
 
 You do not need to touch your real firewall to hack on travelmode.

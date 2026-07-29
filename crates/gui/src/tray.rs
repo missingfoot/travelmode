@@ -16,10 +16,12 @@ use crate::client::GuiCmd;
 
 /// Tray state. Menu callbacks are plain `Fn(&mut Self)`, so everything
 /// they need is cloned in here.
-struct TravelmodeTray {
+pub(crate) struct TravelmodeTray {
     cmd_tx: mpsc::UnboundedSender<GuiCmd>,
     app_sender: Sender<AppMsg>,
     paused: Arc<AtomicBool>,
+    /// True when the system uses a dark color scheme (white glyph).
+    dark: Arc<AtomicBool>,
 }
 
 impl ksni::Tray for TravelmodeTray {
@@ -34,7 +36,13 @@ impl ksni::Tray for TravelmodeTray {
     }
 
     fn icon_name(&self) -> String {
-        "network-transmit-receive-symbolic".into()
+        // Fallback for hosts that prefer themed names (used once the
+        // icon is installed via dev/install-icons.sh).
+        "com.github.missingfoot.travelmode".into()
+    }
+
+    fn icon_pixmap(&self) -> Vec<ksni::Icon> {
+        crate::icons::icons(self.dark.load(Ordering::Relaxed))
     }
 
     fn activate(&mut self, _x: i32, _y: i32) {
@@ -79,25 +87,31 @@ impl ksni::Tray for TravelmodeTray {
 
 /// Try to register the tray icon. Tells the UI whether it succeeded so
 /// window-close can fall back to quitting when there is no tray.
+/// Returns the ksni handle so the client loop can push icon updates
+/// (theme changes).
 pub async fn try_spawn(
     cmd_tx: mpsc::UnboundedSender<GuiCmd>,
     app_sender: Sender<AppMsg>,
     paused: Arc<AtomicBool>,
-) {
+    dark: Arc<AtomicBool>,
+) -> Option<ksni::Handle<TravelmodeTray>> {
     use ksni::TrayMethods;
     let tray = TravelmodeTray {
         cmd_tx,
         app_sender: app_sender.clone(),
         paused,
+        dark,
     };
     match tray.spawn().await {
-        Ok(_handle) => {
+        Ok(handle) => {
             info!("system tray registered");
             let _ = app_sender.send(AppMsg::TrayReady(true));
+            Some(handle)
         }
         Err(e) => {
             warn!(error = %e, "system tray unavailable; continuing without it");
             let _ = app_sender.send(AppMsg::TrayReady(false));
+            None
         }
     }
 }

@@ -7,6 +7,7 @@
 mod app;
 mod client;
 mod fmt;
+mod icons;
 mod pages;
 mod state;
 mod tray;

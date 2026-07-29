@@ -61,6 +61,8 @@ pub enum GuiCmd {
     Unblock { rule_id: u64 },
     /// Reconnect immediately instead of waiting out the backoff.
     Reconnect,
+    /// Theme changed: re-push the tray icon pixmaps.
+    RefreshTrayIcon,
 }
 
 /// Handle the UI uses to talk to the client thread.
@@ -73,6 +75,7 @@ pub fn spawn(
     socket_path: PathBuf,
     app_sender: Sender<AppMsg>,
     paused_flag: Arc<AtomicBool>,
+    dark_flag: Arc<AtomicBool>,
 ) -> ClientHandle {
     let (cmd_tx, cmd_rx) = mpsc::unbounded_channel();
     let handle = ClientHandle {
@@ -95,7 +98,7 @@ pub fn spawn(
                     return;
                 }
             };
-            rt.block_on(run(socket_path, app_sender, cmd_tx, cmd_rx, paused_flag));
+            rt.block_on(run(socket_path, app_sender, cmd_tx, cmd_rx, paused_flag, dark_flag));
         })
         .expect("failed to spawn daemon client thread");
     handle
@@ -107,12 +110,13 @@ async fn run(
     cmd_tx: mpsc::UnboundedSender<GuiCmd>,
     mut cmd_rx: mpsc::UnboundedReceiver<GuiCmd>,
     paused_flag: Arc<AtomicBool>,
+    dark_flag: Arc<AtomicBool>,
 ) {
     // System tray: best-effort, failures only cost the tray icon.
-    tray::try_spawn(cmd_tx, sender.clone(), paused_flag).await;
+    let tray = tray::try_spawn(cmd_tx, sender.clone(), paused_flag, dark_flag).await;
 
     loop {
-        if let Err(e) = session(&socket, &sender, &mut cmd_rx).await {
+        if let Err(e) = session(&socket, &sender, &mut cmd_rx, &tray).await {
             debug!(error = %e, "daemon connection ended");
         }
         send(&sender, ClientMsg::Disconnected);
@@ -124,11 +128,19 @@ async fn run(
                 _ = &mut backoff => break,
                 cmd = cmd_rx.recv() => match cmd {
                     Some(GuiCmd::Reconnect) => break,
+                    Some(GuiCmd::RefreshTrayIcon) => refresh_tray(&tray).await,
                     Some(cmd) => try_command(&socket, &sender, cmd).await,
                     None => return, // UI gone
                 },
             }
         }
+    }
+}
+
+/// Ask ksni to re-query the tray's icon pixmaps (after a theme change).
+async fn refresh_tray(tray: &Option<ksni::Handle<tray::TravelmodeTray>>) {
+    if let Some(handle) = tray {
+        handle.update(|_| ()).await;
     }
 }
 
@@ -138,6 +150,7 @@ async fn session(
     socket: &PathBuf,
     sender: &Sender<AppMsg>,
     cmd_rx: &mut mpsc::UnboundedReceiver<GuiCmd>,
+    tray: &Option<ksni::Handle<tray::TravelmodeTray>>,
 ) -> Result<(), String> {
     // Open the event stream first so nothing is lost between the fetch
     // and the subscription (events arriving during the fetch are
@@ -177,6 +190,7 @@ async fn session(
             cmd = cmd_rx.recv() => match cmd {
                 // Already connected; nothing to reconnect to.
                 Some(GuiCmd::Reconnect) => {}
+                Some(GuiCmd::RefreshTrayIcon) => refresh_tray(tray).await,
                 Some(cmd) => try_command(socket, sender, cmd).await,
                 None => return Ok(()),
             },
@@ -204,7 +218,7 @@ async fn send_command(socket: &PathBuf, cmd: GuiCmd) -> Result<(), String> {
             },
         },
         GuiCmd::Unblock { rule_id } => Request::RemoveRule { id: rule_id },
-        GuiCmd::Reconnect => return Ok(()),
+        GuiCmd::Reconnect | GuiCmd::RefreshTrayIcon => return Ok(()),
     };
     match one_shot(socket, &request).await? {
         Response::Ok => Ok(()),

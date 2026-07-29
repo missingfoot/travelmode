@@ -1,0 +1,9 @@
+[Desktop Entry]
+Name=Travel Mode
+Comment=Per-application network control
+Exec=travelmode-gui
+Icon=com.github.missingfoot.travelmode
+Type=Application
+Categories=Network;
+Terminal=false
+StartupNotify=true

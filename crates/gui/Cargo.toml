@@ -24,3 +24,4 @@ relm4 = { version = "0.11", features = ["libadwaita", "gnome_45"] }
 gtk4 = "0.11"
 libadwaita = { version = "0.9", features = ["v1_4"] }
 ksni = "0.3"
+png = "0.17"

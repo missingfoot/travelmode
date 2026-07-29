@@ -69,6 +69,7 @@ impl SimpleComponent for App {
     fn init_root() -> Self::Root {
         adw::ApplicationWindow::builder()
             .title("Travel Mode")
+            .icon_name("com.github.missingfoot.travelmode")
             .default_width(900)
             .default_height(600)
             .build()
@@ -81,12 +82,26 @@ impl SimpleComponent for App {
     ) -> ComponentParts<Self> {
         // Background daemon client (+ tray on its runtime).
         let paused_flag = Arc::new(AtomicBool::new(false));
+        let dark_flag = Arc::new(AtomicBool::new(false));
         let handle = client::spawn(
             init.socket_path.clone(),
             sender.input_sender().clone(),
             paused_flag.clone(),
+            dark_flag.clone(),
         );
         let cmd_tx = handle.cmd_tx;
+
+        // Follow the system color scheme for the tray glyph variant.
+        {
+            let style = adw::StyleManager::default();
+            dark_flag.store(style.is_dark(), Ordering::Relaxed);
+            let dark_flag = dark_flag.clone();
+            let cmd_tx = cmd_tx.clone();
+            style.connect_notify(Some("dark"), move |style, _| {
+                dark_flag.store(style.is_dark(), Ordering::Relaxed);
+                let _ = cmd_tx.send(GuiCmd::RefreshTrayIcon);
+            });
+        }
 
         // Window chrome: header bar with live network subtitle, offline
         // banner, view stack + bottom switcher (adaptive), toasts.
