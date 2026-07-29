@@ -7,22 +7,22 @@ data each one moves, and lets you block individual applications with a
 single command. Useful on metered connections, tethering, or whenever
 you want to know who is talking to the internet.
 
-**Status: Phase 1** — daemon + CLI working end to end. GUI, profiles,
-and per-network rules are on the roadmap.
+**Status: Phase 2** — daemon, CLI and GTK4 desktop GUI working end to
+end. Profiles and per-network rules are on the roadmap.
 
 ## Architecture
 
 ```
 ┌─────────────┐   length-prefixed JSON over        ┌──────────────────────────────┐
-│  travelmode │─── a Unix socket ─────────────────▶│  travelmoded (root)          │
-│  (CLI)      │    /run/travelmode/daemon.sock     │                              │
-└─────────────┘                                    │  conntrack poller ── flow    │
-                                                   │    bytes, opened/closed      │
-                                                   │  process scanner ── pid,     │
-                                                   │    exe, user                 │
-                                                   │  attribution ── /proc net +  │
-                                                   │    fd inode mapping          │
-                                                   │  rule store ── JSON          │
+│  travelmode │─── a Unix socket ────────────────┐ │  travelmoded (root)          │
+│  (CLI)      │    /run/travelmode/daemon.sock   │ │                              │
+└─────────────┘                                  │ │  conntrack poller ── flow    │
+┌─────────────┐   same IPC (fetch + Subscribe    │ │    bytes, opened/closed      │
+│travelmode-  │─── event stream, auto-reconnect)─┘ │  process scanner ── pid,     │
+│gui (GTK4/   │                                    │    exe, user                 │
+│libadwaita + │                                    │  attribution ── /proc net +  │
+│SNI tray)    │                                    │    fd inode mapping          │
+└─────────────┘                                    │  rule store ── JSON          │
                                                    │    persistence + TTL         │
                                                    │  firewall ── nftables        │
                                                    │    `inet travelmode` table   │
@@ -91,6 +91,31 @@ travelmode watch            # stream live events (JSON lines)
 travelmode --json top       # machine-readable output
 ```
 
+## Desktop app
+
+`travelmode-gui` is a GTK4/libadwaita desktop client (relm4) with a
+StatusNotifierItem tray icon. Build requirements: `gtk4` and
+`libadwaita-1` development packages (targets the libadwaita 1.4 API).
+
+```sh
+cargo build --workspace --release
+install -Dm755 target/release/travelmode-gui ~/.local/bin/travelmode-gui
+```
+
+travelmoded must be running (the GUI is a pure client — with the daemon
+down it shows a reconnect banner and keeps retrying):
+
+```sh
+travelmode-gui                              # uses /run/travelmode/daemon.sock
+travelmode-gui --socket /tmp/travelmode/daemon.sock   # dev socket
+```
+
+Pages: Dashboard (network summary, live speeds, session totals),
+Applications (per-app traffic with block switches), Connections (live
+flow list), Settings (daemon status, global pause, about). The tray
+menu offers Open, Pause/Resume Filtering and Quit (the GUI only — the
+daemon keeps running). Closing the window hides it to the tray.
+
 ## Development
 
 You do not need to touch your real firewall to hack on travelmode.
@@ -123,12 +148,14 @@ cargo clippy --workspace
 
 ## Roadmap
 
-- **Phase 1 (this)** — daemon + CLI: flow tracking, per-app usage,
+- **Phase 1** — daemon + CLI: flow tracking, per-app usage,
   block/allow rules (persistent and temporary), pause/resume, live
   events over IPC.
-- **Phase 2** — GUI on top of the event stream; desktop notifications
-  when a new app first uses the network.
-- **Phase 3** — bandwidth rates and per-app history.
+- **Phase 2 (this)** — GTK4/libadwaita GUI on top of the event stream:
+  dashboard with live speeds, per-app block switches, connections list,
+  tray icon with pause/resume.
+- **Phase 3** — bandwidth rates and per-app history; desktop
+  notifications when a new app first uses the network.
 - **Phase 4** — profiles per network (different rule sets on home
   Wi-Fi vs. tethering, using the SSID/metered detection already in
   place).
