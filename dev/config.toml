@@ -1,0 +1,8 @@
+# Dev config: everything under /tmp, no root-owned system paths touched.
+socket_path = "/tmp/travelmode/daemon.sock"
+rules_file = "/tmp/travelmode/rules.json"
+log_level = "debug"
+fail_open = true
+conntrack_poll_secs = 1
+process_poll_secs = 2
+queue_num = 0

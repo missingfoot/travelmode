@@ -1,0 +1,27 @@
+[Unit]
+Description=travelmode per-application network control daemon
+Documentation=https://github.com/travelmode/travelmode
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/travelmoded
+Restart=on-failure
+RestartSec=2
+
+# travelmoded must run as root: it reads /proc/net/nf_conntrack and
+# /proc/<pid>/fd of all processes, and manages an nftables table and an
+# NFQUEUE. Hardening is therefore deliberately modest — restricting
+# /proc or netlink would break core functionality.
+ProtectSystem=full
+NoNewPrivileges=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+
+# Runtime directory for the IPC socket (/run/travelmode).
+RuntimeDirectory=travelmode
+RuntimeDirectoryMode=0755
+
+[Install]
+WantedBy=multi-user.target
