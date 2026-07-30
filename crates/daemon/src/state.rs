@@ -28,6 +28,8 @@ pub struct DaemonState {
     pub processes: RwLock<HashMap<u32, ProcessInfo>>,
     pub connections: RwLock<HashMap<String, ConnectionInfo>>,
     pub attrib: Mutex<Attributor>,
+    /// Rate limiter for blocked-connection info logging (verdict path).
+    pub block_log: Mutex<crate::firewall::LogThrottle>,
     pub events: broadcast::Sender<Event>,
     /// Last network snapshot, cached for GetNetwork.
     pub network: RwLock<Option<travelmode_core::types::NetworkInfo>>,
@@ -49,6 +51,7 @@ impl DaemonState {
             processes: RwLock::new(HashMap::new()),
             connections: RwLock::new(HashMap::new()),
             attrib: Mutex::new(Attributor::new()),
+            block_log: Mutex::new(crate::firewall::LogThrottle::default()),
             events,
             network: RwLock::new(None),
             firewall: tokio::sync::Mutex::new(None),

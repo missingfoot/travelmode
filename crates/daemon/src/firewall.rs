@@ -175,13 +175,25 @@ fn decide(state: &Arc<DaemonState>, payload: &[u8]) -> Verdict {
     };
     if state.rules.is_blocked(&exe) {
         state.blocked_count.fetch_add(1, Ordering::Relaxed);
-        info!(
-            app = name.as_deref().unwrap_or("?"),
-            pid,
-            exe = %exe.display(),
-            dst,
-            "blocked connection"
-        );
+        let app = name.as_deref().unwrap_or("?");
+        // Full detail on every blocked packet at debug level.
+        debug!(app, pid, exe = %exe.display(), dst, "blocked connection");
+        // Rate-limited info logging: first block per (exe, dst) logs,
+        // repeats within the window are counted, then summarized.
+        match state
+            .block_log
+            .lock()
+            .unwrap()
+            .should_log((exe.clone(), dst.clone()), std::time::Instant::now())
+        {
+            LogAction::First => {
+                info!(app, pid, exe = %exe.display(), dst, "blocked connection");
+            }
+            LogAction::Suppress => {}
+            LogAction::Summary(n) => {
+                info!(app, exe = %exe.display(), dst, "blocked {n} connections (5s window)");
+            }
+        }
         Verdict::Drop
     } else {
         debug!(
@@ -194,6 +206,80 @@ fn decide(state: &Arc<DaemonState>, payload: &[u8]) -> Verdict {
             "no block rule; accept"
         );
         Verdict::Accept
+    }
+}
+
+// ------------------------------------------------------- log throttle
+
+/// What the rate limiter decided for one blocked packet.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LogAction {
+    /// First block for this (exe, dst) key: log at info.
+    First,
+    /// Repeat within the window: counted, no log.
+    Suppress,
+    /// Window expired: log a summary covering this many blocks since
+    /// the last log line (including the current one).
+    Summary(u64),
+}
+
+/// Key blocks are deduplicated by: executable + destination.
+type ThrottleKey = (std::path::PathBuf, String);
+
+struct ThrottleEntry {
+    window_start: std::time::Instant,
+    suppressed: u64,
+}
+
+/// Rate limiter for blocked-connection logging. A blocked browser
+/// retries 10-20x/sec; without this every dropped packet is one info
+/// line. Pure decision logic (clock injected) so it is unit-testable.
+pub struct LogThrottle {
+    window: std::time::Duration,
+    entries: std::collections::HashMap<ThrottleKey, ThrottleEntry>,
+}
+
+impl Default for LogThrottle {
+    fn default() -> Self {
+        Self::new(std::time::Duration::from_secs(5))
+    }
+}
+
+impl LogThrottle {
+    pub fn new(window: std::time::Duration) -> Self {
+        Self {
+            window,
+            entries: std::collections::HashMap::new(),
+        }
+    }
+
+    pub fn should_log(&mut self, key: ThrottleKey, now: std::time::Instant) -> LogAction {
+        match self.entries.get_mut(&key) {
+            None => {
+                self.entries.insert(
+                    key,
+                    ThrottleEntry {
+                        window_start: now,
+                        suppressed: 0,
+                    },
+                );
+                LogAction::First
+            }
+            Some(entry) if now.duration_since(entry.window_start) < self.window => {
+                entry.suppressed += 1;
+                LogAction::Suppress
+            }
+            Some(entry) => {
+                // Window expired: summarize everything since the last
+                // log line (suppressed repeats + this block), restart.
+                let n = entry.suppressed + 1;
+                *entry = ThrottleEntry {
+                    window_start: now,
+                    suppressed: 0,
+                };
+                LogAction::Summary(n)
+            }
+        }
     }
 }
 
@@ -305,6 +391,56 @@ mod tests {
         let mut icmp = ipv4_tcp_packet(1, 2);
         icmp[9] = 1; // ICMP
         assert!(parse_packet(&icmp).is_none());
+    }
+
+    #[test]
+    fn log_throttle_window_transitions() {
+        use std::path::PathBuf;
+        use std::time::{Duration, Instant};
+
+        let key = || (PathBuf::from("/usr/bin/curl"), "93.184.216.34:443".to_string());
+        let other_key = || (PathBuf::from("/usr/bin/wget"), "1.1.1.1:443".to_string());
+        let mut throttle = LogThrottle::new(Duration::from_secs(5));
+        let t0 = Instant::now();
+
+        // First block for a key logs.
+        assert_eq!(throttle.should_log(key(), t0), LogAction::First);
+        // Repeats inside the window are suppressed.
+        assert_eq!(
+            throttle.should_log(key(), t0 + Duration::from_secs(1)),
+            LogAction::Suppress
+        );
+        assert_eq!(
+            throttle.should_log(key(), t0 + Duration::from_secs(2)),
+            LogAction::Suppress
+        );
+        // A different key is independent.
+        assert_eq!(
+            throttle.should_log(other_key(), t0 + Duration::from_secs(3)),
+            LogAction::First
+        );
+        // After the window: one summary covering the 2 suppressed
+        // repeats + this block.
+        assert_eq!(
+            throttle.should_log(key(), t0 + Duration::from_secs(6)),
+            LogAction::Summary(3)
+        );
+        // New window starts clean.
+        assert_eq!(
+            throttle.should_log(key(), t0 + Duration::from_secs(7)),
+            LogAction::Suppress
+        );
+        // Expiry summarizes the suppressed repeat + this block.
+        assert_eq!(
+            throttle.should_log(key(), t0 + Duration::from_secs(13)),
+            LogAction::Summary(2)
+        );
+        // Exactly at the boundary the window has expired, and with no
+        // repeats in between the summary covers just this block.
+        assert_eq!(
+            throttle.should_log(key(), t0 + Duration::from_secs(18)),
+            LogAction::Summary(1)
+        );
     }
 
     #[test]
