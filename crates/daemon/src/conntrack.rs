@@ -33,8 +33,16 @@ pub async fn run(state: Arc<DaemonState>) {
     state.attrib.lock().unwrap().refresh();
 
     let interval = Duration::from_secs(state.config.conntrack_poll_secs.max(1));
+    let mut startup_enforced = false;
     loop {
         poll_once(&state);
+        if !startup_enforced {
+            startup_enforced = true;
+            // The flow map just got its first population: enforce
+            // persisted Block rules against flows that pre-date the
+            // daemon.
+            crate::flowkill::kill_flows_for_block_rules(&state);
+        }
         tokio::time::sleep(interval).await;
     }
 }

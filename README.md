@@ -56,8 +56,12 @@ cargo build --workspace --release
 ## Runtime dependencies
 
 - `nftables` (`nft` CLI)
+- `iproute2` (`ss` CLI — kills existing TCP connections when an app is
+  blocked)
 - `libnetfilter_queue` (linked at build time)
 - conntrack support in the kernel (`nf_conntrack`)
+- `conntrack-tools` (`conntrack` CLI, optional — strict killing of
+  existing UDP flows on block; everything works without it)
 - NetworkManager (optional — used for Wi-Fi SSID / metered detection;
   everything degrades gracefully without it)
 
@@ -90,6 +94,24 @@ travelmode resume
 travelmode watch            # stream live events (JSON lines)
 travelmode --json top       # machine-readable output
 ```
+
+## Blocking semantics
+
+Blocking an app takes effect immediately and retroactively:
+
+- **New connections** are denied right away: the first packet of every
+  new flow is queued to the daemon, which drops it when a Block rule
+  matches the owning executable.
+- **Existing connections are killed** the moment the rule is added (and
+  once at daemon startup for persisted Block rules, so flows that
+  pre-date the daemon are terminated too): TCP sockets are destroyed
+  with `ss -K` (the app's reconnect then hits the block verdict), and
+  conntrack entries are deleted with `conntrack -D` so lingering
+  packets re-enter as NEW and get dropped.
+- `conntrack` (conntrack-tools) is an **optional** dependency: without
+  it, TCP flows are still killed via `ss -K`, but UDP flows of a
+  freshly blocked app linger until their conntrack timeout. Install it
+  for strict UDP blocking.
 
 ## Desktop app
 

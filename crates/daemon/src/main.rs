@@ -8,6 +8,7 @@ mod attrib;
 mod config;
 mod conntrack;
 mod firewall;
+mod flowkill;
 mod ipc;
 mod netinfo;
 mod procs;
@@ -24,7 +25,7 @@ use clap::Parser;
 use tracing::{error, info, warn};
 use tracing_subscriber::EnvFilter;
 use travelmode_core::ipc::{Request, Response};
-use travelmode_core::types::{AppUsage, Event, NetworkInfo, Status};
+use travelmode_core::types::{AppUsage, Event, NetworkInfo, RuleAction, Status};
 
 use crate::config::Config;
 use crate::state::DaemonState;
@@ -194,7 +195,12 @@ fn dispatch(state: Arc<DaemonState>, request: Request) -> Response {
         Request::AddRule { rule } => {
             let stored = state.rules.add(rule);
             info!(id = stored.id, exe = %stored.exe_path.display(), "rule added");
-            state.publish(Event::RuleAdded(stored));
+            state.publish(Event::RuleAdded(stored.clone()));
+            // A new block must also kill flows that are already
+            // established; the queue only sees ct state new.
+            if stored.action == RuleAction::Block {
+                flowkill::kill_flows_for_exe(&state, &stored.exe_path);
+            }
             Response::Ok
         }
         Request::RemoveRule { id } => match state.rules.remove(id) {

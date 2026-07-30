@@ -55,6 +55,31 @@ $CLI remove "$RULE_ID"
 sleep 0.2
 check "curl works after remove"    $CURL -s --max-time 5 -o /dev/null https://example.com
 
+echo "== block kills existing connections =="
+DL_URL=https://speed.hetzner.de/100MB.bin
+if $CURL -sI --max-time 3 -o /dev/null "$DL_URL"; then
+  $CURL -s -o /dev/null --limit-rate 10k "$DL_URL" &
+  CPID=$!
+  sleep 2
+  if ! kill -0 $CPID 2>/dev/null; then
+    echo "SKIP: download ended before it could be blocked"
+  else
+    $CLI block "$CURL"
+    killed=0
+    for _ in $(seq 1 60); do
+      kill -0 $CPID 2>/dev/null || { killed=1; break; }
+      sleep 0.1
+    done
+    if [ $killed -eq 1 ]; then echo "PASS: existing transfer killed on block"; pass=$((pass+1));
+    else echo "FAIL: existing transfer survived block"; fail=$((fail+1)); fi
+    RULE_ID=$($CLI --json rules | grep -oE '"id": *[0-9]+' | head -1 | grep -oE '[0-9]+')
+    [ -n "$RULE_ID" ] && $CLI remove "$RULE_ID"
+  fi
+  kill $CPID 2>/dev/null; wait $CPID 2>/dev/null
+else
+  echo "SKIP: $DL_URL unreachable"
+fi
+
 echo "== persistence =="
 $CLI block "$CURL"
 kill -TERM $DPID; sleep 1
