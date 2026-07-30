@@ -24,8 +24,6 @@ use crate::state::{AppEntry, ClientState};
 struct AppRow {
     row: adw::ActionRow,
     icon: gtk::Image,
-    blocked_badge: gtk::Image,
-    status: gtk::Label,
     switch: gtk::Switch,
     /// Guards against reacting to our own set_active calls.
     updating: Rc<Cell<bool>>,
@@ -158,8 +156,6 @@ impl AppsPage {
         row.sort_key.primary.set(app.bytes_recv);
         row.sort_key.secondary.set(app.bytes_sent);
         set_ui_icon(&row.icon, "app-generic", dark);
-        row.blocked_badge.set_visible(app.blocked);
-        set_ui_icon(&row.blocked_badge, "blocked", dark);
         row.row.set_subtitle(&format!(
             "↑ {} · ↓ {}  —  total ↑ {} ↓ {}",
             human_speed(app.speed_up),
@@ -167,14 +163,7 @@ impl AppsPage {
             human_bytes(app.bytes_sent),
             human_bytes(app.bytes_recv),
         ));
-        row.status.set_text(if app.blocked { "Blocked" } else { "Allowed" });
-        if app.blocked {
-            row.status.add_css_class("error");
-            row.status.remove_css_class("dim-label");
-        } else {
-            row.status.remove_css_class("error");
-            row.status.add_css_class("dim-label");
-        }
+        // Blocked state is conveyed by the section, switch and dimming.
         row.row.set_opacity(if app.blocked { 0.6 } else { 1.0 });
         row.rule_id.set(app.block_rule_id);
         row.updating.set(true);
@@ -191,19 +180,10 @@ impl AppsPage {
         let icon = ui_image("app-generic", false);
         row.add_prefix(&icon);
 
-        let blocked_badge = ui_image("blocked", false);
-        blocked_badge.set_pixel_size(16);
-        blocked_badge.set_visible(false);
-        blocked_badge.set_valign(gtk::Align::Center);
-
-        let status = gtk::Label::new(Some("Allowed"));
-        status.set_valign(gtk::Align::Center);
         let switch = gtk::Switch::new();
         switch.set_valign(gtk::Align::Center);
 
         let suffix = gtk::Box::new(gtk::Orientation::Horizontal, 12);
-        suffix.append(&blocked_badge);
-        suffix.append(&status);
         suffix.append(&switch);
         row.add_suffix(&suffix);
 
@@ -238,8 +218,6 @@ impl AppsPage {
         AppRow {
             row,
             icon,
-            blocked_badge,
-            status,
             switch,
             updating,
             rule_id,
