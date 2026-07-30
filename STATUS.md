@@ -8,6 +8,12 @@ profiles. Rust workspace; root daemon + CLI + GTK4/libadwaita GUI.
 
 Repo: https://github.com/missingfoot/travelmode
 
+**Context documents** (read these for the full picture):
+- `docs/original-spec.md` — the author's original feature set and 10-phase
+  plan, verbatim from project kickoff.
+- `docs/plan.md` — the reviewed/approved implementation plan derived from
+  it (tech choices, why NFQUEUE, why Unix-socket IPC, phase adjustments).
+
 ---
 
 ## What's done
