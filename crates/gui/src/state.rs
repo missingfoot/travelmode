@@ -58,6 +58,16 @@ pub struct ClientState {
     prev_total_down: u64,
 }
 
+/// Ordering for live-sorted list rows: primary key (bytes) descending,
+/// secondary key descending, then name ascending — stable and
+/// deterministic. Used by both the Applications page (recv, sent) and
+/// the Connections page (total, 0).
+pub fn cmp_rows(a: (u64, u64, &str), b: (u64, u64, &str)) -> std::cmp::Ordering {
+    b.0.cmp(&a.0)
+        .then_with(|| b.1.cmp(&a.1))
+        .then_with(|| a.2.cmp(b.2))
+}
+
 /// Grouping key for an application: exe path when known, else the
 /// process name.
 pub fn app_key(exe: &Option<PathBuf>, name: &str) -> String {
@@ -438,6 +448,22 @@ mod tests {
         assert_eq!(s.conns.len(), MAX_CONNECTIONS);
         assert!(!s.conns.contains_key("tcp:0"));
         assert!(s.conns.contains_key(&format!("tcp:{}", MAX_CONNECTIONS + 9)));
+    }
+
+    #[test]
+    fn rows_sort_bytes_desc_then_name_asc() {
+        use std::cmp::Ordering;
+        // Primary key descending.
+        assert_eq!(cmp_rows((200, 0, "b"), (100, 0, "a")), Ordering::Less);
+        assert_eq!(cmp_rows((100, 0, "a"), (200, 0, "b")), Ordering::Greater);
+        // Secondary key breaks primary ties (descending).
+        assert_eq!(cmp_rows((100, 50, "b"), (100, 10, "a")), Ordering::Less);
+        assert_eq!(cmp_rows((100, 10, "a"), (100, 50, "b")), Ordering::Greater);
+        // Name ascending breaks full byte ties.
+        assert_eq!(cmp_rows((100, 10, "aaa"), (100, 10, "bbb")), Ordering::Less);
+        assert_eq!(cmp_rows((100, 10, "bbb"), (100, 10, "aaa")), Ordering::Greater);
+        // Identical keys are equal (stable).
+        assert_eq!(cmp_rows((100, 10, "same"), (100, 10, "same")), Ordering::Equal);
     }
 
     #[test]
